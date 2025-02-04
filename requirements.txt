@@ -1,6 +1,5 @@
 streamlit
-pyannote-audio 
-huggingface_hub
-torch 
-torchvision 
-torchaudio --index-url https://download.pytorch.org/whl/cpu
+pyannote.audio 
+huggingface_hub 
+numpy 
+torch
