@@ -1,26 +1,35 @@
 import streamlit as st
 from pyannote.audio import Pipeline
-from huggingface_hub import login, HfApi
+from huggingface_hub import login, HfApi, hf_cache_home
 from io import BytesIO
 import os
+import shutil
 
 # Streamlit App Title
 st.title("🎙 Speaker Diarization with pyannote.audio")
 st.write("Upload an audio file, and the AI will detect different speakers.")
 
-# Load Hugging Face Token from Streamlit Secrets
+# Hugging Face Token from Streamlit Secrets
 HUGGINGFACE_TOKEN = st.secrets.get("HUGGINGFACE_TOKEN")
 
 if not HUGGINGFACE_TOKEN:
     st.error("❌ Hugging Face Token is missing! Add it to Streamlit Secrets.")
     st.stop()
 
-# Authenticate with Hugging Face
+# Clear Hugging Face Cache (Optional but helpful for debugging)
+cache_dir = hf_cache_home()
+try:
+    shutil.rmtree(cache_dir)  # Remove the cache directory
+    st.info("🧹 Hugging Face cache cleared.")
+except Exception as e:
+    st.warning(f"⚠️ Could not clear cache: {e}")
+
+
+# Authenticate with Hugging Face (Improved Error Handling)
 try:
     login(HUGGINGFACE_TOKEN)
     st.success("✅ Successfully authenticated with Hugging Face!")
 
-    # Test API access
     api = HfApi()
     user_info = api.whoami(token=HUGGINGFACE_TOKEN)
     st.write(f"🔑 Logged in as: **{user_info['name']}**")
@@ -29,32 +38,41 @@ except Exception as e:
     st.error(f"❌ Authentication failed: {e}")
     st.stop()
 
-# Load the Speaker Diarization Pipeline
+# Load the Speaker Diarization Pipeline (More Robust Loading)
 try:
-    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=HUGGINGFACE_TOKEN)
+    with st.spinner("Loading model..."):  # Show a spinner
+        pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=HUGGINGFACE_TOKEN)
     st.success("✅ Model loaded successfully!")
 except Exception as e:
     st.error(f"❌ Failed to load model: {e}")
+    st.exception(e)  # Display the full traceback for debugging
     st.stop()
 
 # Function to perform Speaker Diarization
 def diarize_audio(audio_path):
     """Run speaker diarization and save results."""
-    diarization = pipeline(audio_path)
+    try:
+        diarization = pipeline(audio_path)
 
-    # Format output as text
-    output_text = []
-    for turn, _, speaker in diarization.itertracks(yield_label=True):
-        output_text.append(f"{turn.start:.2f} - {turn.end:.2f} | Speaker {speaker}")
+        # Format output as text
+        output_text = []
+        for turn, _, speaker in diarization.itertracks(yield_label=True):
+            output_text.append(f"{turn.start:.2f} - {turn.end:.2f} | Speaker {speaker}")
 
-    result_text = "\n".join(output_text)
+        result_text = "\n".join(output_text)
 
-    # Convert text to a downloadable file
-    output_buffer = BytesIO()
-    output_buffer.write(result_text.encode())
-    output_buffer.seek(0)
+        # Convert text to a downloadable file
+        output_buffer = BytesIO()
+        output_buffer.write(result_text.encode())
+        output_buffer.seek(0)
 
-    return output_buffer, result_text
+        return output_buffer, result_text
+    except Exception as e:
+        st.error(f"❌ Diarization failed: {e}")
+        st.exception(e) # Show traceback
+        return None, None  # Return None values to handle the error
+
+
 
 # File Upload
 uploaded_file = st.file_uploader("📤 Upload an Audio File", type=["wav", "mp3", "flac"])
@@ -66,15 +84,16 @@ if uploaded_file is not None:
         f.write(uploaded_file.getbuffer())
 
     st.write("⏳ Processing the audio for speaker diarization...")
-    
-    # Perform Speaker Diarization
+
+    # Perform Speaker Diarization (Handle potential errors)
     output_buffer, transcript = diarize_audio(temp_audio_path)
 
-    # Display Transcript
-    st.text_area("📜 Diarization Output", transcript, height=300)
+    if output_buffer and transcript: # Check if both are not None
+        # Display Transcript
+        st.text_area("📜 Diarization Output", transcript, height=300)
 
-    # Download Button
-    st.download_button(label="📥 Download Transcript", data=output_buffer, file_name="diarization.txt", mime="text/plain")
+        # Download Button
+        st.download_button(label="📥 Download Transcript", data=output_buffer, file_name="diarization.txt", mime="text/plain")
 
-    # Cleanup
+    # Cleanup (Always remove the temporary file, even if diarization fails)
     os.remove(temp_audio_path)
