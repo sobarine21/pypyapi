@@ -1,23 +1,19 @@
 import streamlit as st
 from pyannote.audio import Pipeline
-from pyannote.core import Segment
 from huggingface_hub import login
 from io import BytesIO
 import os
 
-# Set Hugging Face API token
-HUGGINGFACE_TOKEN = "your_huggingface_token"  # Replace with your actual token
+# Load Hugging Face API token from Streamlit secrets
+HUGGINGFACE_TOKEN = st.secrets["HUGGINGFACE_TOKEN"]
 
 # Authenticate with Hugging Face
-login(HUGGINGFACE_TOKEN)
-
-# Load the pyannote speaker diarization pipeline
 try:
+    login(HUGGINGFACE_TOKEN)
     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=HUGGINGFACE_TOKEN)
-    if pipeline is None:
-        st.error("Failed to load the diarization pipeline. Check your Hugging Face token and model access.")
+    st.success("Pipeline loaded successfully!")
 except Exception as e:
-    st.error(f"Error loading pipeline: {e}")
+    st.error(f"Authentication failed: {e}")
     pipeline = None
 
 # Function to perform speaker diarization
