@@ -2,4 +2,4 @@ streamlit
 pyannote.audio 
 huggingface_hub 
 numpy 
-torch
+
