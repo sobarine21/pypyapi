@@ -1,6 +1,7 @@
 import streamlit as st
-from pyannote.audio import Pipeline
+from pyannote.audio import Pipeline, Audio
 from huggingface_hub import login, HfApi
+from pyannote.core import Segment
 from io import BytesIO
 import os
 
@@ -32,7 +33,7 @@ except Exception as e:
 # Load the Speaker Diarization Pipeline
 try:
     st.write("Attempting to load the model...")
-    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=HUGGINGFACE_TOKEN)
+    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=HUGGINGFACE_TOKEN)
     st.success("✅ Model loaded successfully!")
 except Exception as e:
     st.error(f"❌ Failed to load model: {e}")
@@ -40,10 +41,15 @@ except Exception as e:
     st.stop()
 
 # Function to perform Speaker Diarization
-def diarize_audio(audio_path):
+def diarize_audio(audio_path, start=None, end=None):
     """Run speaker diarization and save results."""
     try:
-        diarization = pipeline(audio_path)
+        if start is None and end is None:
+            diarization = pipeline(audio_path)  # inference on the whole file
+        else:
+            excerpt = Segment(start=start, end=end)
+            waveform, sample_rate = Audio().crop(audio_path, excerpt)
+            diarization = pipeline({"waveform": waveform, "sample_rate": sample_rate})
 
         # Format output as text
         output_text = []
@@ -77,12 +83,4 @@ if uploaded_file is not None:
     # Perform Speaker Diarization
     output_buffer, transcript = diarize_audio(temp_audio_path)
 
-    if output_buffer and transcript:  # Check if both are not None
-        # Display Transcript
-        st.text_area("📜 Diarization Output", transcript, height=300)
-
-        # Download Button
-        st.download_button(label="📥 Download Transcript", data=output_buffer, file_name="diarization.txt", mime="text/plain")
-
-    # Cleanup
-    os.remove(temp_audio_path)
+    if output_buffer and transcript:  # Check if both
