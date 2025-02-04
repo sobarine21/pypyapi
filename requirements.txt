@@ -1,5 +1,4 @@
 streamlit
-pyannote.audio 
-huggingface_hub 
+vosk 
 numpy 
 
