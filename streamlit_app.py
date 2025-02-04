@@ -1,22 +1,43 @@
 import streamlit as st
 from pyannote.audio import Pipeline
-from huggingface_hub import login
+from huggingface_hub import login, HfApi
 from io import BytesIO
 import os
 
-# Load Hugging Face API token from Streamlit secrets
-HUGGINGFACE_TOKEN = st.secrets["HUGGINGFACE_TOKEN"]
+# Streamlit App Title
+st.title("🎙 Speaker Diarization with pyannote.audio")
+st.write("Upload an audio file, and the AI will detect different speakers.")
+
+# Load Hugging Face Token from Streamlit Secrets
+HUGGINGFACE_TOKEN = st.secrets.get("HUGGINGFACE_TOKEN")
+
+if not HUGGINGFACE_TOKEN:
+    st.error("❌ Hugging Face Token is missing! Add it to Streamlit Secrets.")
+    st.stop()
 
 # Authenticate with Hugging Face
 try:
     login(HUGGINGFACE_TOKEN)
-    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=HUGGINGFACE_TOKEN)
-    st.success("Pipeline loaded successfully!")
-except Exception as e:
-    st.error(f"Authentication failed: {e}")
-    pipeline = None
+    st.success("✅ Successfully authenticated with Hugging Face!")
 
-# Function to perform speaker diarization
+    # Test API access
+    api = HfApi()
+    user_info = api.whoami(token=HUGGINGFACE_TOKEN)
+    st.write(f"🔑 Logged in as: **{user_info['name']}**")
+
+except Exception as e:
+    st.error(f"❌ Authentication failed: {e}")
+    st.stop()
+
+# Load the Speaker Diarization Pipeline
+try:
+    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization", use_auth_token=HUGGINGFACE_TOKEN)
+    st.success("✅ Model loaded successfully!")
+except Exception as e:
+    st.error(f"❌ Failed to load model: {e}")
+    st.stop()
+
+# Function to perform Speaker Diarization
 def diarize_audio(audio_path):
     """Run speaker diarization and save results."""
     diarization = pipeline(audio_path)
@@ -35,12 +56,8 @@ def diarize_audio(audio_path):
 
     return output_buffer, result_text
 
-# Streamlit UI
-st.title("Speaker Diarization with pyannote.audio")
-st.write("Upload an audio file to identify different speakers and generate a transcript.")
-
-# File uploader
-uploaded_file = st.file_uploader("Upload Audio File", type=["wav", "mp3", "flac"])
+# File Upload
+uploaded_file = st.file_uploader("📤 Upload an Audio File", type=["wav", "mp3", "flac"])
 
 if uploaded_file is not None:
     # Save the uploaded file temporarily
@@ -48,18 +65,16 @@ if uploaded_file is not None:
     with open(temp_audio_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    # Process the audio file
-    st.write("Processing the audio for speaker diarization...")
-    if pipeline:
-        output_buffer, transcript = diarize_audio(temp_audio_path)
+    st.write("⏳ Processing the audio for speaker diarization...")
+    
+    # Perform Speaker Diarization
+    output_buffer, transcript = diarize_audio(temp_audio_path)
 
-        # Display the transcript
-        st.text_area("Diarization Output", transcript, height=300)
+    # Display Transcript
+    st.text_area("📜 Diarization Output", transcript, height=300)
 
-        # Download button
-        st.download_button(label="Download Transcript", data=output_buffer, file_name="diarization.txt", mime="text/plain")
+    # Download Button
+    st.download_button(label="📥 Download Transcript", data=output_buffer, file_name="diarization.txt", mime="text/plain")
 
-        # Clean up
-        os.remove(temp_audio_path)
-    else:
-        st.error("Diarization pipeline is not loaded. Check your Hugging Face authentication.")
+    # Cleanup
+    os.remove(temp_audio_path)
